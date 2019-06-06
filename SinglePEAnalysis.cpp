@@ -15,13 +15,11 @@
 
 #include <vector>
 #include <iostream>
-#include <string>
-#include <fstream>
 
 //#include "Style.C"
 
 #define START_ORDER 0
-#define NORDERS 6
+#define NORDERS 8
 
 #define OFFSET 755
 struct FitResults {
@@ -88,29 +86,16 @@ FitResults fitSingleHisto( TH1F* histo, double xMin, double xMax )
 {
   FitResults fr;
   TF1* f1 = new TF1( "fPMT", PMTFunction, xMin, xMax, 6 );
-  //f1->SetParameter( 0, histo->Integral()/5. ); //normalization
-  // f1->SetParameter( 1, 0.6); //poiss mu
-  //f1->SetParameter( 2, 25. ); //gauss step
-  //f1->SetParameter( 3, 15. ); //gauss sigma
-  //f1->SetParameter( 4, 25. ); //offset
-  //f1->SetParameter( 5, 4. ); //sigmaoffset
+  f1->SetParameter( 0, histo->Integral()/5. ); //normalization
+  f1->SetParameter( 1, 0.3); //poiss mu
+  f1->SetParameter( 2, 22.74 ); //gauss step
+  f1->SetParameter( 3, 12.13 ); //gauss sigma
+  f1->SetParameter( 4, 29.16 ); //offset
+  f1->SetParameter( 5, 4.21 ); //sigmaoffset
 //   f1->SetParameter( 6, 0.03 ); //alpha
 //   f1->SetParameter( 7, 0.4 ); //w
 //   f1->SetParameter( 8, 0.3 ); //w
 
-
-  TF1 *gausPed= new TF1("gausPed","gaus", 0, 35);
-  TF1 *gausSe= new TF1("gausSE","gaus", 35,60);
-  histo->Fit("gausPed", "RN");
-  histo->Fit("gausSE", "RN");
-
-  f1->SetParameter( 0, histo->Integral()/5. ); //normalization
-  f1->SetParameter( 1, 0.6); //poiss mu
-  f1->SetParameter( 2, gausPed->GetParameter(1)); //gauss step
-  f1->SetParameter( 3, (gausSe->GetParameter(2)-gausPed->GetParameter(2)) ); //gauss sigma
-  f1->SetParameter( 4, (gausSe->GetParameter(1)-gausPed->GetParameter(1)) ); //offset
-  f1->SetParameter( 5, gausPed->GetParameter(2) ); //sigmaoffset
-  
   f1->SetParName(0,"Norm");
   f1->SetParName(1,"#mu");
   f1->SetParName(2,"PE charge");
@@ -126,21 +111,32 @@ FitResults fitSingleHisto( TH1F* histo, double xMin, double xMax )
   //    f1->FixParameter( 7, 0. ); //w
   //    f1->FixParameter( 8, 0. ); //w
       
-   f1->SetParLimits( 1, 0.1, 5.  ); //poiss mu
-   f1->SetParLimits( 2, 5., 40. ); //gauss step
-   f1->SetParLimits( 3, 8., 30. ); //gauss sigma
-   f1->SetParLimits( 4, 10, 35.); //offset
-   f1->SetParLimits( 5, 2., 10. ); //gauss sigma
+   f1->SetParLimits( 1, 0.1, 20  ); //poiss mu
+   f1->SetParLimits( 2, 21., 27. ); //gauss step
+   f1->SetParLimits( 3, 10., 14. ); //gauss sigma
+   f1->SetParLimits( 4, 28, 33.); //offset
+   f1->SetParLimits( 5, 3., 5. ); //gauss sigma
+
+
+   
+   // f1->FixParameter( 2, 22.74 ); //gauss step
+   //f1->FixParameter( 3, 12.13 ); //gauss sigma
+   //f1->FixParameter( 4, 29.16 ); //offset
+   //f1->FixParameter( 5, 4.21 ); //sigmaoffset
+
+   
+
+    
 
   f1->SetLineColor(kRed+4);
   f1->SetLineWidth(6);
   
   
-  histo->Fit( f1, "LR+" );
+  histo->Fit( f1, "EMLR+" );
   TString histoName(histo->GetName());
   
   fr.mu = f1->GetParameter(1);
-  fr.mu_err = f1->GetParError(1); 
+  fr.mu_err = f1->GetParError(1);
   delete f1;
   return fr;
 }
@@ -148,11 +144,16 @@ FitResults fitSingleHisto( TH1F* histo, double xMin, double xMax )
 
 void SinglePEAnalysis()
 {
-  gSystem->Exec("mkdir FitSingle");
+
+
+   gSystem->Exec("mkdir FitSingle");
   gSystem->Exec("mkdir Fileroot");
   gROOT->SetBatch("kTRUE");
 
+
+  
  
+  
   vector<string> FileList;
   string Filename="Filelist.txt";
   FileList=ReadData(Filename);
@@ -160,7 +161,7 @@ void SinglePEAnalysis()
   bool printOpenedFileNumber= true;
   if(printFileList){
     for(int i=0;i<(int)FileList.size();i++){
-      std::cout<<"File " << 0<< "   " << (FileList.at(0)).c_str() << std::endl;
+      std::cout<<"File " << i<< "   " << (FileList.at(i)).c_str() << std::endl;
       }
    }//chiudo if
 
@@ -173,32 +174,46 @@ void SinglePEAnalysis()
   
   TCanvas *c[FileList.size()];
   //TFile *f=TFile::Open("h4Reco_calib1325V.root");
+  TFile *v=TFile::Open("Voltaggi.root");
+  TTree *volt=(TTree*)v->Get("volt");
+  Int_t voltag;
+  
+
+  volt->SetBranchAddress("voltaggio", &voltag);
   TGraphErrors *calib= new TGraphErrors(FileList.size());
-  TCanvas *canvCalib= new TCanvas("Calibration", "calibration", 800,700);
+  TGraphErrors *mugr= new TGraphErrors(FileList.size());
+  TGraphErrors *sigmape= new TGraphErrors(FileList.size());
+  TGraphErrors *ped= new TGraphErrors(FileList.size());
+  
+  TGraphErrors *calib2= new TGraphErrors(FileList.size());
+  TCanvas *canvCalib= new TCanvas("Calibration", "calibration", 1200,700);
+  TCanvas *canvmugr= new TCanvas("Calibration", "calibration", 1200,700);
+  TCanvas *canvsigmape= new TCanvas("Calibration", "calibration", 1200,700);
+  TCanvas *canvped= new TCanvas("Calibration", "calibration", 1200,700);
 
-
-  TF1* calibfit= new TF1("fitcalib","[0]+x*[1]",1245, 1355);
+  TF1* calibfit= new TF1("fitcalib","[0]+x*[1]",1220, 1370);
 
   
   for(int i=0; i<(int)FileList.size(); i++){
+    volt->GetEntry(i);
     c[i]=new TCanvas(("c"+to_string(i)).c_str(),("c"+to_string(i)).c_str(),800,700);
     f[i]=TFile::Open((FileList.at(i).c_str()));
    if(printOpenedFileNumber) std::cout << "FileOpened: " << i << std::endl;
    out[i]=TFile::Open(("Fileroot/SinglePEAnalysis"+to_string(i)+".root").c_str(),"RECREATE");
    
 
-   adcData[i]= new TH1F(("ledData"+to_string(i)).c_str(),("ledData"+to_string(i)).c_str(),600,0,200);
+   adcData[i]= new TH1F(("ledData"+to_string(i)).c_str(),("ledData"+to_string(i)).c_str(),600,0,400);
   tree[i]=(TTree*)f[i]->Get("digi");
   //TTree* tree=(TTree*)f->Get("digi");
   // gSystem->Exec("mkdir calib1350V");
 
 
-  
+ 
   
   tree[i]->Project(("ledData"+to_string(i)).c_str(),"charge_tot[C0]");
   // adcData[i]->Print();
   //  std::cout << "FIT RANGE " << adcData[i]->GetMean()-3*adcData[i]->GetRMS() << "," << adcData[i]->GetMean()+3*adcData[i]->GetRMS() << std::endl;
-  FitResults fr=fitSingleHisto(adcData[i],0,165);
+   FitResults fr=fitSingleHisto(adcData[i],0,300);
   //  c->SetLogy(1);
   gStyle->SetOptStat(0);
   gStyle->SetOptFit(10111);
@@ -208,12 +223,12 @@ void SinglePEAnalysis()
   adcData[i]->SetLineColor(kBlack);
   adcData[i]->Draw("PE");
   adcData[i]->GetXaxis()->SetTitle("Charge [ADC Counts]");
-  gPad->SetLogy();
+  //gPad->SetLogy();
   adcData[i]->GetYaxis()->SetTitle("N of events");
 
-   for (int ipe=0; ipe<5;++ipe)
+   for (int ipe=0; ipe<20;++ipe)
     {
-      TF1* peFunc=new TF1(Form("peFunc_%d",ipe),"gausn",0,200);
+      TF1* peFunc=new TF1(Form("peFunc_%d",ipe),"gausn",0,800);
       peFunc->SetLineColor(1+ipe);
       peFunc->SetLineWidth(2);
       float mu_pe=ipe*adcData[i]->GetFunction("fPMT")->GetParameter(2)+adcData[i]->GetFunction("fPMT")->GetParameter(4);
@@ -229,30 +244,49 @@ void SinglePEAnalysis()
   //c[i]->SaveAs(("FitSingle/singlePEfit"+to_string(i)+".png").c_str());
   c[i]->SaveAs(("FitSingle/singlePEfit"+to_string(i)+".pdf").c_str());
     out[i]->Write();
-    calib->SetPoint(i, (1150+i*25), adcData[i]->GetFunction("fPMT")->GetParameter(2));
+    //  if(voltag!=1350){
+   
+    mugr->SetPoint(i, voltag, adcData[i]->GetFunction("fPMT")->GetParameter(1));
+    mugr->SetPointError(i, 0., adcData[i]->GetFunction("fPMT")->GetParError(1));
+
+    calib->SetPoint(i, voltag, adcData[i]->GetFunction("fPMT")->GetParameter(2));
     calib->SetPointError(i, 0., adcData[i]->GetFunction("fPMT")->GetParError(2));
+
+
+    ped->SetPoint(i, voltag, adcData[i]->GetFunction("fPMT")->GetParameter(4));
+    ped->SetPointError(i, 0., adcData[i]->GetFunction("fPMT")->GetParError(4));
+    //} else {
+    //calib2->SetPoint(i, voltag, adcData[i]->GetFunction("fPMT")->GetParameter(2));
+    //calib2->SetPointError(i, voltag, adcData[i]->GetFunction("fPMT")->GetParError(2));
+    //}
     
   }
-  gStyle->SetOptFit(11111);
-  canvCalib->cd();
   
+
+  canvCalib->cd();
+   gPad->SetLogy(0);
   calib->SetMarkerStyle(20);
   calib->SetMarkerSize(0.6);
-  calib->Fit(calibfit,"R");
   calib->Draw("AP");
-  canvCalib->Update();
-  TPaveStats *statBox = (TPaveStats*)(calib->FindObject("stats"));
-  if (statBox) {
-    statBox->SetX1NDC(0.20);
-    statBox->SetX2NDC(0.60);
-    statBox->SetY1NDC(0.59);
-    statBox->SetY2NDC(0.91);
-    statBox->SetFillColor(0);
-    statBox->SetFillStyle(0);
-    statBox->SetBorderSize(1);
-    statBox->Draw();
-  }
-  canvCalib->Update();
-  canvCalib->SaveAs("CalibrationPMT.pdf");
+  canvCalib->SaveAs("singlepe.pdf");
+
+  canvmugr->cd();
+   gPad->SetLogy(0);
+  mugr->SetMarkerStyle(20);
+  mugr->SetMarkerSize(0.6);
+  mugr->Draw("AP");
+  canvmugr->SaveAs("mupmt.pdf");
+
+  canvped->cd();
+   gPad->SetLogy(0);
+  ped->SetMarkerStyle(20);
+  ped->SetMarkerSize(0.6);
+  ped->Draw("AP");
+  canvped->SaveAs("ped.pdf");
+
+ 
+
+ 
+  
   
 }
